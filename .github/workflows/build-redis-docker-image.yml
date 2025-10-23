@@ -1,0 +1,49 @@
+name: Build Redis Docker image
+env:
+  REGION: ${{ vars.REGION }}
+  REGISTRY_REPO: ${{ vars.REGISTRY_REPO }}
+  APP_NAME: gcp-redis
+  REDIS_PATH: bitnami/redis/8.2/debian-12
+
+on:
+  push:
+    branches: [ "main", "devops" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Auth
+      uses: 'google-github-actions/auth@v3'
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v3
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: 'Use gcloud CLI'
+      run: 'gcloud info'
+
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+    - name: Build the Docker image
+      run: |
+        cd $REDIS_PATH
+        docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$REGISTRY_REPO/$APP_NAME:${GITHUB_SHA::7} \
+        -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$REGISTRY_REPO/$APP_NAME:latest .
+
+    - name: Push to Artifact Registry
+      run: |
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$REGISTRY_REPO/$APP_NAME:${GITHUB_SHA::7}
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$REGISTRY_REPO/$APP_NAME:latest
